@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script>
+js_success="success"
+$(document).ready(function(){
+    $("#run").click(
+       function(){
+         $.post("runCode",{code: $("#editor").val(),id:"0"},
+                 function(data,status){
+                                if(data!=js_success)
+                                   alert(data );
+     });});
+    $("#runid").click(
+       function(){
+         $.post("runCode",{code: $("#editor").val(),id:$("#engine").val()},
+                 function(data,status){
+                                if(data!=js_success)
+                                   alert(data );
+    });});
+
+
+});
+</script>
+
+<textarea id="editor" rows="40" cols="120" ></textarea>
+<br/>
+
+
+<button id="run">run</button><button id="runid">run id</button><textarea id="engine" rows="1" cols="5" >1000</textarea>

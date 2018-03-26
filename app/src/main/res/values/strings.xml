@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">JsMaster</string>
+    <string name="run">run</string>
+    <string name="control">\uD83D\uDC27</string>
+</resources>

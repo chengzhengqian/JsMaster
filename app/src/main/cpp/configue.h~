@@ -1,0 +1,3 @@
+#define GLOBALSTATE    "com/serendipity/chengzhengqian/jsmaster/GlobalState"
+#define JSPRINT  "printToJSLog"
+#define JSPRINTTYPE "(Ljava/lang/String;)V"
