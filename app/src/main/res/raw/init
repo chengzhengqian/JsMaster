@@ -1,1 +1,22 @@
-VERSION="VERSION 1.0"
+__java_handler__ = {
+
+    get: function (targ, key, recv) {
+       if(targ.hasOwnProperty(key))
+           return targ[key]
+
+       return function(){
+           var bare=__call__.apply(null,[targ,key].concat(Array.prototype.slice.call(arguments)));
+           if(typeof bare === 'object'){
+               return new Proxy(bare,__java_handler__);}
+           else
+               return bare;
+       }
+    },
+
+};
+
+function load(name){
+    var bare=__loadClass__(name);
+    return new Proxy(bare,__java_handler__);
+};
+

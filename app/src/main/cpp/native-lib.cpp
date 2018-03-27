@@ -33,11 +33,13 @@ jstring newJavaString(const char *c, JNIEnv *env){
   return env->NewStringUTF(c);
 }
 void printToJsLog(const char *c){
-  JNIEnv *currentEnv=getCurrentEnv();
-  jclass cls = currentEnv->FindClass(GLOBALSTATE);
-  jmethodID printLog = currentEnv->GetStaticMethodID(cls, JSPRINT, JSPRINTTYPE);
-  currentEnv->CallStaticVoidMethod(cls, printLog, currentEnv->NewStringUTF(c));
-
+  JNIEnv *env=getCurrentEnv();
+  jclass cls = env->FindClass(GLOBALSTATE);
+  jmethodID printLog = env->GetStaticMethodID(cls, JSPRINT, JSPRINTTYPE);
+  jstring js=newJavaString(c, env);
+  env->CallStaticVoidMethod(cls, printLog,js);
+  env->DeleteLocalRef(js);
+  /* get release, new delete*/
 }
 
 duk_ret_t native_print(duk_context *ctx) {
@@ -68,27 +70,17 @@ duk_ret_t tostring_raw(duk_context *ctx, void *udata) {
 
 
 const char *runString(const char *input, int id, int threadId) {  
-  const char *res;
+  const char *result;
   duk_context *ctx=ctxs[id][threadId];
   duk_push_string(ctx, input);
   duk_safe_call(ctx, eval_raw, NULL, 1 /*nargs*/, 1 /*nrets*/);
   duk_safe_call(ctx, tostring_raw, NULL, 1 /*nargs*/, 1 /*nrets*/);
-  res = duk_get_string(ctx, -1);
+  result = duk_get_string(ctx, -1);
   duk_pop(ctx);
-  return res;
+  return result;
 }
 
   
-extern "C" JNIEXPORT jstring JNICALL
-Java_com_serendipity_chengzhengqian_jsmaster_JsEngine_runJS(JNIEnv *env,
-                                                                    jobject obj,
-                                                                    jstring s, jint id, jint threadId) {
-  env->GetJavaVM(&jvm);
-  const char *c = getJavaString(s, env);
-  jstring result = newJavaString(runString(c,id,threadId),env);
-  releaseJavaString(c,s,env);
-  return result;
-}
 void registerFuncGlobal(const char * name, duk_c_function func, duk_context *ctx ){
   duk_push_c_function(ctx, func, DUK_VARARGS);
   duk_put_global_string(ctx, name);  
@@ -185,16 +177,25 @@ duk_ret_t compileFunc(duk_context *ctx){
 /* the wrapped function to manipulate jni and refection*/
 /* use a hash table */
 /* this functions is as raw as possible, we try to implement advanced features in java or javascript side*/
-duk_ret_t __wrapToObject__(duk_context *ctx, void * udata){
-  int id=duk_get_int(ctx,-1);
+/* push {__id__:id} to stack*/
+void __pushObjectFromId__(duk_context *ctx, int id){
   duk_push_object(ctx);
   duk_push_string(ctx,JSJAVAOBJECTHANDLEKEY);
   duk_push_int(ctx,id);
   duk_put_prop(ctx,-3);
+}
+/* wrap to top of stack (assumging int) to {__id__:id}*/
+duk_ret_t __wrapToObject__(duk_context *ctx, void * udata){
+  int id=duk_get_int(ctx,-1);
+  __pushObjectFromId__(ctx,id);
   return 1;
 }
-/* this does the exact opposite part,  object -> (unwraped object)  int where int is above unwrapped object  0, java object, 1, integer,   (-1,0) for unknown*/
-/* it seems safe to just return 1 value*/
+/* this does the exact opposite part,  object -> (unwraped object)  int where int is above unwrapped object  0, java object, 1, integer,   (-1,0) for unknown
+   This does:
+   check if it is a object (ie. wrapped from pervious Java calls), then push obj.__id__ to stakc and set t_ 
+   check if it is a number, and if it is a integer value , then set t_ otherwise, treat it as double
+*/
+
 duk_ret_t __unwrapObject__(duk_context *ctx, void* t_){
   int* t=(int *)t_;
   duk_int_t type=duk_get_type(ctx,-1);
@@ -224,26 +225,10 @@ duk_ret_t __unwrapObject__(duk_context *ctx, void* t_){
 }
 /* string -> bare class, get the handle for class<?> object by its full name, there should be a javascript function wrap it ot a object and handle as a proxy*/
 
-duk_ret_t __loadClass__(duk_context *ctx){
-  const char* c=duk_get_string(ctx,0);
-  JNIEnv *currentEnv=getCurrentEnv();
-  jclass cls = currentEnv->FindClass(JSJAVAINTERFACE);
-  jmethodID loadClass = currentEnv->GetStaticMethodID(cls, JSJAVALOADCLASS , JSJAVALOADCLASSTYPE);
-  int result=currentEnv->CallStaticIntMethod(cls, loadClass, currentEnv->NewStringUTF(c));
-  duk_push_int(ctx,result);
-  duk_safe_call(ctx,__wrapToObject__,NULL,1,1);
-  return 1;
-}
-
-
-/* (class obj, string, para1, para2, ..), there is at least two ..*/
-duk_ret_t __callStaticMethod__(duk_context *ctx){ 
+/*wrap js values in entire stack to a jobject Array and pop them*/
+void __popStackToJObjectArray__(duk_context *ctx, JNIEnv *env,jobjectArray* params){
   duk_idx_t idx_top=duk_get_top_index(ctx);
   int size=idx_top+1;
-  JNIEnv *env=getCurrentEnv();
-  jclass JJClass = env->FindClass(JSJAVAINTERFACE);
-  jmethodID callStaticMethod = env->GetStaticMethodID(JJClass, JSJAVACALLSTATICMETHOD , JSJAVACALLSTATICMETHODTYPE);
-
   jclass intClass= env->FindClass("java/lang/Integer");
   jclass doubleClass= env->FindClass("java/lang/Double");
   jclass objClass= env->FindClass("java/lang/Object");
@@ -251,14 +236,11 @@ duk_ret_t __callStaticMethod__(duk_context *ctx){
   jmethodID initInt = (env)->GetMethodID( intClass, "<init>", "(I)V");
   jmethodID initDouble = (env)->GetMethodID( doubleClass, "<init>", "(D)V");
   jmethodID initJObj = (env)->GetMethodID( JObjClass, "<init>", "(I)V");
-
-  jobjectArray params=env->NewObjectArray(size,objClass,NULL);
+  (*params)=env->NewObjectArray(size,objClass,NULL);
   int type;
-  for(int i=0;i<size;i++){
-
+  for(int i=size-1;i>=0;i--){
     duk_safe_call(ctx,__unwrapObject__,&type,1,1);
     jobject jp;
-    
     if(type==JAVAINTEGER)
       jp=env->NewObject(intClass,initInt,duk_get_int(ctx,-1));
     else if(type==JAVADOUBLE)
@@ -269,22 +251,65 @@ duk_ret_t __callStaticMethod__(duk_context *ctx){
       jp=env->NewObject(JObjClass,initJObj,duk_get_int(ctx,-1));
     else 
       jp=env->NewObject(intClass,initInt,duk_get_int(ctx,-1));
-
-    env->SetObjectArrayElement(params,idx_top-i,jp);
+    env->SetObjectArrayElement(*params,i,jp);
     duk_pop(ctx);
     env->DeleteLocalRef(jp);
   }
-  env->CallStaticObjectMethod(JJClass, callStaticMethod, params);
-  duk_push_string(ctx,"call static");
-  /* import to return this number, otherwisize*/
+}
+/* wrap jObject into bare form. For int double, string etc, just use the javascript type*/
+void __pushJObjectToStack__(duk_context *ctx, JNIEnv *env, jobject obj){
+  jclass intClass= env->FindClass("java/lang/Integer");
+  jclass doubleClass= env->FindClass("java/lang/Double");
+  jclass stringClass= env->FindClass("java/lang/String");
+  jclass objClass= env->FindClass("java/lang/Object");
+  jclass JObjClass = env->FindClass(JSOBJECT);
+  if(env->IsInstanceOf(obj,intClass)){    
+    jmethodID intValue=env->GetMethodID(intClass,"intValue","()I");
+    duk_push_int(ctx,env->CallIntMethod(obj,intValue));
+  }
+  else  if(env->IsInstanceOf(obj,doubleClass)){
+    jmethodID doubleValue=env->GetMethodID(intClass,"doubleValue","()D");
+    duk_push_number(ctx,env->CallDoubleMethod(obj,doubleValue));
+  }
+  else  if(env->IsInstanceOf(obj,stringClass)){
+    duk_push_string(ctx,getJavaString((jstring)obj,env));
+  }
+  else  if(env->IsInstanceOf(obj,JObjClass)){
+    jfieldID idField=env->GetFieldID(JObjClass,"id","I");
+    int id=env->GetIntField(obj,idField);
+    __pushObjectFromId__(ctx,id);
+  }
+  else
+    duk_push_int(ctx,JAVAUNKNOWN);
+}
+
+duk_ret_t  __callJsJavaInterface__(duk_context *ctx, const char * methodName){
+  JNIEnv *env=getCurrentEnv();
+  jclass JJClass = env->FindClass(JSJAVAINTERFACE);
+  jmethodID method =
+    env->GetStaticMethodID(JJClass, methodName , JSJAVAMETHODTYPE);
+  jobjectArray params;
+  __popStackToJObjectArray__(ctx,env,&params);
+  jobject result=env->CallStaticObjectMethod(JJClass, method, params);
+  __pushJObjectToStack__(ctx,env,result);
   return 1;
 }
 
+duk_ret_t __loadClass__(duk_context *ctx){
+  return __callJsJavaInterface__(ctx, JSJAVALOADCLASS);
+}
+/* (class obj, string, para1, para2, ..), there is at least two .., this is intended as more general then the orignal desing, all static, object method and field can be called in this way, to make thing simple, we treat field as method without parameters. and the jaa side will automatically determine whether we should call it staticlaly or as object method*/
+duk_ret_t __call__(duk_context *ctx){
+    return __callJsJavaInterface__(ctx, JSJAVACALL);
+}
+
+
+/* necessary c interfact to interopated with Java, I try to keep this as simple as possible*/
 void initCtx(duk_context *ctx){
   registerFuncGlobal("print",native_print,ctx);
-  registerFuncGlobal("ctxs_size",ctxs_size,ctx);
+  registerFuncGlobal("__ctxs__",ctxs_size,ctx);
   registerFuncGlobal("__loadClass__", __loadClass__, ctx);
-  registerFuncGlobal("__callStaticMethod__", __callStaticMethod__, ctx);
+  registerFuncGlobal("__call__", __call__, ctx);
   if(TUTORIAL){
     registerFuncGlobal("getInt", getInt, ctx);
     registerFuncGlobal("isString", isString, ctx);
@@ -299,7 +324,6 @@ void initCtx(duk_context *ctx){
 extern "C" JNIEXPORT void JNICALL
 Java_com_serendipity_chengzhengqian_jsmaster_JsEngine_create(JNIEnv *env,
                                                              jobject obj, jint id) {
-
   duk_context *ctx= duk_create_heap_default();
   ctxs[id][DEFAUlTTHREADID]=ctx;
   initCtx(ctx);
@@ -310,20 +334,19 @@ Java_com_serendipity_chengzhengqian_jsmaster_JsEngine_create(JNIEnv *env,
 extern "C" JNIEXPORT void JNICALL
 Java_com_serendipity_chengzhengqian_jsmaster_JsEngine_createNewThread(JNIEnv *env,
 								      jobject obj, jint id, jint threadId) {
-  duk_context *new_ctx;
+
   duk_context *default_ctx=ctxs[id][DEFAUlTTHREADID];
   duk_push_thread(default_ctx);
-  new_ctx=duk_get_context(default_ctx,-1);
-  ctxs[id][threadId]=new_ctx;
+  ctxs[id][threadId]=duk_get_context(default_ctx,-1);
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_serendipity_chengzhengqian_jsmaster_JsEngine_createNewThreadNewEnv(JNIEnv *env,
 								      jobject obj, jint id, jint threadId) {
-  duk_context *new_ctx;
-  duk_context *default_ctx=ctxs[id][DEFAUlTTHREADID];
-  (void)duk_push_thread_new_globalenv((default_ctx));
-  new_ctx=duk_get_context(default_ctx,-1);
+
+  duk_context* default_ctx=ctxs[id][DEFAUlTTHREADID];
+  duk_push_thread_new_globalenv((default_ctx));
+  duk_context* new_ctx=duk_get_context(default_ctx,-1);
   ctxs[id][threadId]=new_ctx;
 }
 
@@ -332,4 +355,15 @@ Java_com_serendipity_chengzhengqian_jsmaster_JsEngine_destroy(JNIEnv *env,
                                                               jobject obj, jint id) {
   duk_destroy_heap(ctxs[id][DEFAUlTTHREADID]);
   ctxs.erase(ctxs.find(id));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_serendipity_chengzhengqian_jsmaster_JsEngine_runJS(JNIEnv *env,
+                                                                    jobject obj,
+                                                                    jstring s, jint id, jint threadId) {
+  env->GetJavaVM(&jvm);
+  const char *c = getJavaString(s, env);
+  jstring result = newJavaString(runString(c,id,threadId),env);
+  releaseJavaString(c,s,env);
+  return result;
 }

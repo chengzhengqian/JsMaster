@@ -17,18 +17,30 @@ public class JsJavaInterface {
         return result;
 
     }
-    public static int loadClass(String className){
-        try {
-            Class<?> c=Class.forName(className);
-            int id=getNewId();
-            objects.put(id,c);
-            return id;
-        } catch (Exception e) {
-            GlobalState.sendToMain(GlobalState.ADDLOGERROR,e.toString());
+    public static Object loadClass(Object[] paras){
+        if(paras.length>0) {
+            String className="";
+            if(paras[0] instanceof String){
+                className= (String) paras[0];
+            }
+            else{
+                GlobalState.sendToMain(GlobalState.ADDLOGERROR,"class name should be string");
+                return 0;
+            }
+            try {
+
+                Class<?> c = Class.forName(className);
+                int id = getNewId();
+                objects.put(id, c);
+                return new JObject(id);
+            } catch (Exception e) {
+                GlobalState.sendToMain(GlobalState.ADDLOGERROR, e.toString());
+            }
         }
         return 0;
     }
-    public static Object callStaticMethod(Object[] paras){
+    public static Object call(Object[] paras){
+        GlobalState.sendToMain(GlobalState.ADDLOG,"static:\n");
         for(Object b:paras){
             if(b instanceof JObject){
                // GlobalState.sendToMain(GlobalState.ADDLOG,"Java Object :"+((JObject) b).id+"\n");
@@ -43,8 +55,9 @@ public class JsJavaInterface {
             else
             GlobalState.sendToMain(GlobalState.ADDLOG,b.getClass().getSimpleName()+":"+b.toString()+"\n");
         }
-        return null;
+        if(paras.length>0)
+            return paras[paras.length-1];
+        return -1;
     }
-
 
 }
