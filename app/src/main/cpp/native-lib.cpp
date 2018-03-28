@@ -298,9 +298,22 @@ duk_ret_t  __callJsJavaInterface__(duk_context *ctx, const char * methodName){
 duk_ret_t __loadClass__(duk_context *ctx){
   return __callJsJavaInterface__(ctx, JSJAVALOADCLASS);
 }
+duk_ret_t __release__(duk_context *ctx){
+  return __callJsJavaInterface__(ctx, JSJAVARELEASE);
+}
 /* (class obj, string, para1, para2, ..), there is at least two .., this is intended as more general then the orignal desing, all static, object method and field can be called in this way, to make thing simple, we treat field as method without parameters. and the jaa side will automatically determine whether we should call it staticlaly or as object method*/
 duk_ret_t __call__(duk_context *ctx){
     return __callJsJavaInterface__(ctx, JSJAVACALL);
+}
+duk_ret_t __field__(duk_context *ctx){
+    return __callJsJavaInterface__(ctx, JSJAVAFIELD);
+}
+duk_ret_t __setfield__(duk_context *ctx){
+    return __callJsJavaInterface__(ctx, JSJAVASETFIELD);
+}
+
+duk_ret_t __findWindow__(duk_context *ctx){
+    return __callJsJavaInterface__(ctx, JSJAVAFINDWINDOW);
 }
 
 
@@ -310,6 +323,10 @@ void initCtx(duk_context *ctx){
   registerFuncGlobal("__ctxs__",ctxs_size,ctx);
   registerFuncGlobal("__loadClass__", __loadClass__, ctx);
   registerFuncGlobal("__call__", __call__, ctx);
+  registerFuncGlobal("__field__", __field__, ctx);
+  registerFuncGlobal("__setfield__", __setfield__, ctx);
+  registerFuncGlobal("__release__", __release__, ctx);
+  registerFuncGlobal("__findWindow__", __findWindow__, ctx);
   if(TUTORIAL){
     registerFuncGlobal("getInt", getInt, ctx);
     registerFuncGlobal("isString", isString, ctx);

@@ -7,6 +7,10 @@
 #define JSJAVAINTERFACE    "com/serendipity/chengzhengqian/jsmaster/JsJavaInterface"
 #define JSJAVALOADCLASS  "loadClass"
 #define JSJAVACALL  "call"
+#define JSJAVARELEASE "release"
+#define JSJAVAFIELD "field"
+#define JSJAVASETFIELD "setField"
+#define JSJAVAFINDWINDOW "findWindow"
 
 #define JSJAVAMETHODTYPE  "([Ljava/lang/Object;)Ljava/lang/Object;"
 #define JSOBJECT    "com/serendipity/chengzhengqian/jsmaster/JObject"

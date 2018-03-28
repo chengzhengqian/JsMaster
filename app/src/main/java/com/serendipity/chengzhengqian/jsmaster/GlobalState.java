@@ -17,13 +17,15 @@ public class GlobalState {
     public static int ADDLOGINFO = 6;
     public static int RESERVEINDEPENDENTCTXIDMIN=1000;
     public static int RESERVEINDEPENDENTCTXIDMAX=2000;
+    public static int ADDWINDOW=7;
+    public static final int RUNCURRENTWINDOW = 8;
     public static boolean isUIRunning;
     public static ResultReceiver uiReceiver;
     public static String ContentTag="content";
     public static boolean isServerRunning=false;
     public static boolean isFileInited=false;
     public static String  serverIndexHtml;
-
+    public static int CurrentWindowsHeapId=0;
     public static void sendToMain(int type, String content){
         if(isUIRunning)
         {

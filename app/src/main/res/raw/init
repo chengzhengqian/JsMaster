@@ -1,15 +1,36 @@
 __java_handler__ = {
+    set: function (targ, key, val, recv) {
+            if(key[0]=="$"){
+                targ[key] = val;
+                return true;
+            }
+            __setfield__.apply(null,[targ,key.substring(1),val]);
+            return true;
+    },
+
 
     get: function (targ, key, recv) {
        if(targ.hasOwnProperty(key))
-           return targ[key]
-
-       return function(){
-           var bare=__call__.apply(null,[targ,key].concat(Array.prototype.slice.call(arguments)));
+           return targ[key];
+       if(key[0]=="$"){
+           var bare=__field__.apply(null,[targ,key.substring(1)]);
            if(typeof bare === 'object'){
-               return new Proxy(bare,__java_handler__);}
+                 __setRelease__(bare);
+                 return new Proxy(bare,__java_handler__);
+           }
            else
-               return bare;
+              return bare;
+       }
+       else{
+           return function(){
+               var bare=__call__.apply(null,[targ,key].concat(Array.prototype.slice.call(arguments)));
+               if(typeof bare === 'object'){
+                   __setRelease__(bare);
+                   return new Proxy(bare,__java_handler__);
+                   }
+               else
+                   return bare;
+           };
        }
     },
 
@@ -17,6 +38,19 @@ __java_handler__ = {
 
 function load(name){
     var bare=__loadClass__(name);
+    __setRelease__(bare);
     return new Proxy(bare,__java_handler__);
 };
 
+function __setRelease__(a){
+    Duktape.fin(a, function (x) {
+          __release__(x);
+       });
+    return a;
+}
+
+function App(){
+    bare=__findWindow__(__name__);
+    __setRelease__(bare);
+    return new Proxy(bare,__java_handler__);
+}

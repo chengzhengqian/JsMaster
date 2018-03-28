@@ -13,6 +13,14 @@ $(document).ready(function(){
                                 if(data!=js_success)
                                    alert(data );
      });});
+    $("#runUI").click(
+            function(){
+              $.post("runCodeUI",{code: $("#editor").val(),id:"0"},
+                      function(data,status){
+                                     if(data!=js_success)
+                                        alert(data );
+          });});
+
     $("#runid").click(
        function(){
          $.post("runCode",{code: $("#editor").val(),id:$("#engine").val()},
@@ -20,6 +28,14 @@ $(document).ready(function(){
                                 if(data!=js_success)
                                    alert(data );
     });});
+
+    $("#new").click(
+          function(){
+            $.post("createWindows",{name: $("#windows").val()},
+                    function(data,status){
+                                   if(data!=js_success)
+                                      alert(data );
+       });});
 
 
 });
@@ -29,4 +45,9 @@ $(document).ready(function(){
 <br/>
 
 
-<button id="run">run</button><button id="runid">run id</button><textarea id="engine" rows="1" cols="5" >1000</textarea>
+<button id="run">run</button>
+<button id="runUI">run windows</button>
+<textarea id="windows" rows="1" cols="5" >Window</textarea>
+<button id="new">new</button>
+<br/>
+<button id="runid">run id</button><textarea id="engine" rows="1" cols="5" >1000</textarea>

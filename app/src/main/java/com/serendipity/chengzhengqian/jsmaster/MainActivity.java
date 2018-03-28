@@ -1,8 +1,10 @@
 package com.serendipity.chengzhengqian.jsmaster;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.ResultReceiver;
@@ -190,6 +192,11 @@ public class MainActivity extends Activity {
 
     private void generateViews(){
         views.clear();
+        windows.clear();
+        if(isMenuShow) {
+            mainLayout.removeView(menuList);
+            isMenuShow=false;
+        }
         views.put(jsLogTag,generateJavascriptLogView());
         views.put(jsEditorTag,generateJavascriptEditorView());
         views.put(serverTag,generateServerControlView());
@@ -197,24 +204,56 @@ public class MainActivity extends Activity {
             mainLayout.addView(l);
         }
     }
+    public static HashMap<String,App> windows=new HashMap<>();
+
+    private void addWindow(String name){
+        int index=0;
+        String uniquename;
+        if(windows.get(name)==null){
+            uniquename=name;
+        }
+        else {
+            while (windows.get(name + index) != null) {
+                index += 1;
+            }
+            uniquename=name+index;
+        }
+        App app=new App(this,JsEngine.getNewHeapIdAndCreate(),uniquename);
+        app.setLayoutParams(noShow);
+
+        //**some test code**/
+//        TextView t=new TextView(app.ctx);
+//        t.setText(uniquename);
+//        app.addView(t);
+        windows.put(uniquename,app);
+        mainLayout.addView(app);
+    }
+
     private void showToast(String msg){
         Toast.makeText(this,msg,Toast.LENGTH_LONG).show();
     }
-    private final String setCurrentViewNotFound="set view must be one of ";
-    private void setCurrrentView(String tag){
-        if(views.get(tag)!=null){
-            LinearLayout.LayoutParams noShow
-                    =new LinearLayout.LayoutParams
-                    (0, LinearLayout.LayoutParams.MATCH_PARENT,0);
-            LinearLayout.LayoutParams show
-                    =new LinearLayout.LayoutParams
-                    (LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT,1);
-            for(LinearLayout l:views.values()){
-                l.setLayoutParams(noShow);
-            }
-            views.get(tag).setLayoutParams(show);
+    public static LinearLayout.LayoutParams noShow
+            =new LinearLayout.LayoutParams
+            (0, LinearLayout.LayoutParams.MATCH_PARENT,0);
+    public static LinearLayout.LayoutParams show
+            =new LinearLayout.LayoutParams
+            (LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT,1);
 
+    private final String setCurrentViewNotFound="set view must be one of ";
+    public void setCurrrentView(String tag){
+        for(LinearLayout l:views.values()){
+            l.setLayoutParams(noShow);
         }
+        for(App l:windows.values()){
+            l.setLayoutParams(noShow);
+        }
+        if(views.get(tag)!=null){
+            views.get(tag).setLayoutParams(show);
+        }
+        else if(windows.get(tag)!=null){
+            windows.get(tag).setLayoutParams(show);
+        }
+
         else {
             showToast(setCurrentViewNotFound+views.keySet().toString());
         }
@@ -266,36 +305,35 @@ public class MainActivity extends Activity {
     }
 
 
-    public int menuSize=250;
+
     private boolean isMenuShow=false;
     ListView menuList;
+    @TargetApi(Build.VERSION_CODES.M)
     public void generateMenu(){
         menuList = new ListView(this);
-        ArrayList<String> s = new ArrayList<>(views.keySet());
-        ArrayAdapter<String> viewTags =
-                new ArrayAdapter<String>(this,
-                        android.R.layout.simple_list_item_1,
-                        s
-                );
+        final ArrayList<String> windowsList = new ArrayList<>();
+        for(String n:views.keySet()){
+            windowsList.add(n);
+        }
+        for(String n:windows.keySet()){
+            windowsList.add(n);
+        }
+
         ConstraintLayout.LayoutParams lp =
                 new ConstraintLayout.LayoutParams
-                        (menuSize, ConstraintLayout.LayoutParams.WRAP_CONTENT);
+                        (ConstraintLayout.LayoutParams.WRAP_CONTENT, ConstraintLayout.LayoutParams.WRAP_CONTENT);
         lp.topToBottom = R.id.control;
         lp.rightToRight = R.id.Root;
-        menuList.setAdapter(viewTags);
+
+        menuList.setAdapter(new WindowsListAdaptor(windowsList,this));
         menuList.setLayoutParams(lp);
 
 
-        menuList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                toggleMenus(view);
-                setCurrrentView((String) ((TextView) view).getText());
-            };});
 
     }
     public void toggleMenus(View view) {
         if(!isMenuShow) {
+            generateMenu();
             root.addView(menuList);
             isMenuShow=true;
         }else {
@@ -382,7 +420,13 @@ public class MainActivity extends Activity {
             else if(type==GlobalState.RUNCODE){
                 addLog("\n"+JsEngine.runJavaScript(content, JsEngine.DefaultEngineId));
             }
-
+            else if(type==GlobalState.ADDWINDOW){
+                addLogWithColor("create Windows"+content+"\n",Color.BLUE);
+                addWindow(content);
+            }
+            else if(type==GlobalState.RUNCURRENTWINDOW){
+                addLog("\n"+JsEngine.runJavaScript(content, GlobalState.CurrentWindowsHeapId));
+            }
             else if(type>=GlobalState.RESERVEINDEPENDENTCTXIDMIN &&type<=GlobalState.RESERVEINDEPENDENTCTXIDMAX){
                 addLog("\n"+JsEngine.runJavaScript(content,type));
             }

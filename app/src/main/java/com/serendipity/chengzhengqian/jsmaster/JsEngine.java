@@ -2,6 +2,7 @@ package com.serendipity.chengzhengqian.jsmaster;
 
 
 import java.util.HashMap;
+import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,7 +20,10 @@ public class JsEngine {
     private static native void create(int id);
     private static void createWithInitFile(int id){
         create(id);
+        /*notice run javascript is a wrapped version, which will automatically create heap if necessary*/
         runJS(initString,id,DefaultThreadId);
+        runJS(HEAPIDJS+"="+id,id,DefaultThreadId);
+
     }
     public static String initString="";
     /* Assuming id has be create and threadId is different from DefaultThreadId*/
@@ -41,7 +45,7 @@ public class JsEngine {
         contexts.clear();
     }
     public static void init(String initFile){
-
+        JsJavaInterface.objects.clear();
         initString=initFile;
         createWithInitFile(DefaultEngineId);
         registerContexts(DefaultEngineId,DefaultThreadId,true);
@@ -52,6 +56,20 @@ public class JsEngine {
         }
         clearContexts();
     }
+    private static Random rand=new Random();
+
+    public static int getNewHeapIdAndCreate(){
+        int result=rand.nextInt();
+        while(contexts.get(result)!=null){
+            result=rand.nextInt();
+        }
+        createWithInitFile(result);
+        GlobalState.CurrentWindowsHeapId=result;
+        registerContexts(result,DefaultThreadId,true);
+        return result;
+    }
+    public static final String  HEAPIDJS="__heap_id__";
+    public static final String  WINDOWSNAME="__name__";
     private static HashMap<Integer,HashMap<Integer,Boolean>> contexts=new HashMap<>();
     /* check the heap id and thread id and then run. Create them if necessary
     * */
@@ -93,7 +111,7 @@ public class JsEngine {
                 created=" created";
             }
         }
-        GlobalState.sendToMain(GlobalState.ADDLOGINFO,"\n>>> "+id+ " : "+threadId+created+"\n");
+        GlobalState.sendToMain(GlobalState.ADDLOGINFO,"\n>>> Heap Id:"+id+ "; Thread Id:"+threadId+created+"\n");
         String result="";
         try {
             result=runJS(x, id, threadId);

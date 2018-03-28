@@ -32,10 +32,28 @@ public class JsServer extends NanoHTTPD {
                 )return indexHtml();
 
         else if(session.getUri().equals("/runCode"))return runCode(session);
+        else if(session.getUri().equals("/runCodeUI"))return runCodeUI(session);
 
+        else if(session.getUri().equals("/createWindows"))return createWindows(session);
 
         return newFixedLengthResponse("Not Found!");
     }
+
+    private Response createWindows(IHTTPSession session) {
+        String result=parseBodyForPostOrGet(session);
+        String response="";
+        if(result.equals("")) {
+            String name= session.getParms().get("name");
+            if (GlobalState.isUIRunning) {
+                response = SUCCESS;
+                GlobalState.sendToMain(GlobalState.ADDWINDOW, name);
+            } else {
+                response = NOTRUNNING;
+            }
+        }
+        return newFixedLengthResponse(response);
+    }
+
     public static String SUCCESS="success";
     public static String NOTRUNNING="not running";
     private Response runCode(IHTTPSession session) {
@@ -64,8 +82,27 @@ public class JsServer extends NanoHTTPD {
 
         return newFixedLengthResponse(response);
     }
+    private Response runCodeUI(IHTTPSession session) {
+        String result=parseBodyForPostOrGet(session);
+        String response="";
+        if(result.equals("")) {
+            String content = session.getParms().get("code");
+            if (GlobalState.isUIRunning) {
+
+                response = SUCCESS;
+                GlobalState.sendToMain(GlobalState.RUNCURRENTWINDOW,content);
+
+            } else {
+                response = NOTRUNNING;
+            }
+        }
+
+        return newFixedLengthResponse(response);
+    }
 
     private Response indexHtml(){
         return newFixedLengthResponse(GlobalState.serverIndexHtml);
     }
+
+
 }
